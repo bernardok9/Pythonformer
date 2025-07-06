@@ -15,6 +15,8 @@ boost_strength = -13
 alive = True
 launched = False
 
+MAX_FALL_SPEED = 15
+
 # Ground
 launch_pad = pygame.Rect(0, 580, WIDTH, 20)
 
@@ -61,6 +63,10 @@ while running:
         else:
             velocity_y += gravity
             player.y += velocity_y
+
+            # GameOver if player down
+            if velocity_y > MAX_FALL_SPEED:
+                alive = False 
 
             # Collision: DOWN-UP (Boost) UP-DOWN (DEATH)
             for portal in portals:
