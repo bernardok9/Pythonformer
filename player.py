@@ -1,6 +1,6 @@
 import pygame
-
 import assets
+import settings
 
 class Player:
     def __init__(self, x, y):
@@ -58,7 +58,8 @@ class Player:
         if keys[pygame.K_SPACE] and self.on_ground:
             self.velocity_y = self.jump_power
             self.on_ground = False
-            assets.sfx_jump.play()
+            if settings.sfx_enabled:
+                assets.sfx_jump.play()
 
         self.update_rect()
 

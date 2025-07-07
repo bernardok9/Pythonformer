@@ -8,6 +8,8 @@ import assets
 from enemy import Enemy, load_enemy_images
 import level
 from player import Player
+import music
+import settings
 
 WIDTH, HEIGHT = level.WIDTH, level.HEIGHT
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -52,8 +54,12 @@ def run_game_loop():
     enemies = create_enemies()
     player.reset(50, HEIGHT - 70)
 
+    music.init_music()
+
     while True:
         dt = clock.tick(60) / 1000
+        music.update_music()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -77,19 +83,24 @@ def run_game_loop():
                     if player.velocity_y > 0 and player.rect.bottom - player.velocity_y <= enemy.rect.top:
                         enemy.alive = False
                         player.velocity_y = player.jump_power / 2
-                        assets.sfx_hurt.play()
+                        if settings.sfx_enabled:
+                            assets.sfx_hurt.play()
                     else:
                         alive = False
-                        assets.sfx_disappear.play()
+                        if settings.sfx_enabled:
+                            assets.sfx_disappear.play()
 
             for death in level.deaths:
                 if death.left < player.rect.centerx < death.right:
                     if player.rect.bottom >= level.ground.top:
                         alive = False
+                        if settings.sfx_enabled:
+                            assets.sfx_disappear.play()
 
             if player.rect.colliderect(level.finish_line):
                 win = True
-                assets.sfx_magic.play()
+                if settings.sfx_enabled:
+                    assets.sfx_magic.play()
         else:
             player.animate_death()
 

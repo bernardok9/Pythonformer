@@ -1,5 +1,9 @@
 import pygame
+import settings
 
+def play_sfx(sound):
+    if settings.sfx_enabled:
+        sound.play()
 
 def scale_image(img, size=(32, 32)):
     return pygame.transform.scale(img, size)
