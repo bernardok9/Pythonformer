@@ -1,221 +1,161 @@
 import pygame
 import sys
+from enemy import Enemy, load_enemy_images
+import level
+from player import Player
+import assets
 
 pygame.init()
 
-# Screen Config
-WIDTH, HEIGHT = 800, 400
+WIDTH, HEIGHT = level.WIDTH, level.HEIGHT
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 
-# Test Block Colors
-WHITE = (255, 255, 255)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-BLACK = (0, 0, 0)
-ORANGE = (255, 165, 0)
+fly_images = load_enemy_images("fly")
+ladybug_images = load_enemy_images("ladybug")
+slimef_images = load_enemy_images("slime_f")
+slimen_images = load_enemy_images("slime_n")
+snail_images = load_enemy_images("snail")
 
-# Map Limits
-LEFT_LIMIT = -300
-RIGHT_LIMIT = 1600
-
-# Sprites
-player_idle = pygame.image.load("assets/character/character_yellow_idle.png").convert_alpha()
-player_hit = pygame.image.load("assets/character/character_yellow_hit.png").convert_alpha()
-player_walk_a = pygame.image.load("assets/character/character_yellow_walk_a.png").convert_alpha()
-player_walk_b = pygame.image.load("assets/character/character_yellow_walk_b.png").convert_alpha()
-player_jump = pygame.image.load("assets/character/character_yellow_jump.png").convert_alpha()
-
-# Sprites Sizes
-PLAYER_WIDTH, PLAYER_HEIGHT = 40, 60
-player_idle = pygame.transform.scale(player_idle, (PLAYER_WIDTH, PLAYER_HEIGHT))
-player_hit = pygame.transform.scale(player_hit, (PLAYER_WIDTH, PLAYER_HEIGHT))
-player_walk_a = pygame.transform.scale(player_walk_a, (PLAYER_WIDTH, PLAYER_HEIGHT))
-player_walk_b = pygame.transform.scale(player_walk_b, (PLAYER_WIDTH, PLAYER_HEIGHT))
-player_jump = pygame.transform.scale(player_jump, (PLAYER_WIDTH, PLAYER_HEIGHT))
-
-# Plataforms
-platforms = [
-    pygame.Rect(150, HEIGHT - 80, 100, 20),
-    pygame.Rect(300, HEIGHT - 130, 100, 20),
-    pygame.Rect(500, HEIGHT - 180, 100, 20),
-    pygame.Rect(900, HEIGHT - 130, 100, 20),
-    pygame.Rect(1200, HEIGHT - 180, 100, 20),
+flag_images = [
+    pygame.image.load("assets/flag/flag_blue_a.png").convert_alpha(),
+    pygame.image.load("assets/flag/flag_blue_b.png").convert_alpha()
 ]
+flag_anim_index = 0
+flag_anim_timer = 0
+flag_anim_speed = 10
 
-# Restart
-def reset():
-    global player, velocity_y, on_ground, camera_x, alive, win, enemies
-    global walk_timer, walk_frame, player_image, death_velocity
+player = Player(50, HEIGHT - 70)
 
-    player = pygame.Rect(50, HEIGHT - 70, PLAYER_WIDTH, PLAYER_HEIGHT)
-    velocity_y = 0
-    on_ground = False
-    camera_x = 0
-    alive = True
-    win = False
+def create_enemies():
+    return [
+        Enemy(200, level.platforms[0].top - 32, ladybug_images, level.platforms[0]),
+        Enemy(400, level.platforms[1].top - 32, slimef_images, level.platforms[1]),
+        Enemy(600, level.platforms[2].top - 32, slimen_images, level.platforms[2]),
+        Enemy(800, level.platforms[3].top - 32, snail_images, level.platforms[3]),
+        Enemy(1100, 100, fly_images, is_fly=True),
 
-    walk_timer = 0
-    walk_frame = 0
-    player_image = player_idle
-    death_velocity = 0
-
-    enemies = [
-        {"rect": pygame.Rect(200, HEIGHT - 80 - 40, 40, 40), "dir": 1, "platform": platforms[0]},
-        {"rect": pygame.Rect(550, HEIGHT - 180 - 40, 40, 40), "dir": -1, "platform": platforms[2]},
-        {"rect": pygame.Rect(950, HEIGHT - 130 - 40, 40, 40), "dir": 1, "platform": platforms[3]},
+        Enemy(800, level.ground.top - 32, snail_images, patrol_start=470, patrol_end=900),
+        Enemy(840, level.ground.top - 32, snail_images, patrol_start=470, patrol_end=900),
+        Enemy(880, level.ground.top - 32, snail_images, patrol_start=470, patrol_end=900),
+        Enemy(920, level.ground.top - 32, snail_images, patrol_start=470, patrol_end=900),
     ]
 
-# Cam
-camera_x = 0
+enemies = create_enemies()
 
-# Fields
-grounds = [
-    pygame.Rect(LEFT_LIMIT, HEIGHT - 20, 2000, 20),
-]
+alive = True
+win = False
 
-holes = [
-    pygame.Rect(400, HEIGHT - 20, 150, 20),
-]
+def reset_game():
+    global alive, win, enemies
+    alive = True
+    win = False
+    player.reset(50, HEIGHT - 70)
+    enemies = create_enemies()
 
-deaths = [
-    pygame.Rect(400, HEIGHT - 5, 150, 10),
-]
-
-finish_line = pygame.Rect(1400, HEIGHT - 100, 20, 100)
-
-reset()
-
-# Main Loop Game
 while True:
-    screen.fill(WHITE)
     dt = clock.tick(60) / 1000
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:
+                reset_game()
 
     keys = pygame.key.get_pressed()
 
-    # RESTART
-    if keys[pygame.K_r] and (not alive or win):
-        reset()
-
     if alive and not win:
-        if keys[pygame.K_LEFT]:
-            player.x -= 5
-        if keys[pygame.K_RIGHT]:
-            player.x += 5
+        player.handle_input(keys)
+        player.apply_gravity()
+        player.update(level.platforms, [level.ground])
 
-        if player.x < LEFT_LIMIT:
-            player.x = LEFT_LIMIT
-        if player.right > RIGHT_LIMIT:
-            player.right = RIGHT_LIMIT
-
-        camera_x = max(LEFT_LIMIT, min(RIGHT_LIMIT - WIDTH, player.x - WIDTH // 2))
-
-        # JUMP
-        if keys[pygame.K_SPACE] and on_ground:
-            velocity_y = -15
-            on_ground = False
-
-        velocity_y += 0.8
-        player.y += velocity_y
-
-        on_ground = False
-
-        for g in grounds:
-            if player.colliderect(g):
-                player.bottom = g.top
-                velocity_y = 0
-                on_ground = True
-
-        for plat in platforms:
-            if player.colliderect(plat) and velocity_y > 0:
-                if player.bottom - velocity_y <= plat.top + 5:
-                    player.bottom = plat.top
-                    velocity_y = 0
-                    on_ground = True
-
-        # ANIMATIONS
-        if not on_ground:
-            player_image = player_jump
-        elif keys[pygame.K_LEFT] or keys[pygame.K_RIGHT]:
-            walk_timer += 1
-            if walk_timer >= 10:
-                walk_timer = 0
-                walk_frame = 1 - walk_frame
-            player_image = player_walk_a if walk_frame == 0 else player_walk_b
-        else:
-            player_image = player_idle
-
-        # ENEMIES
-        for e in enemies:
-            enemy = e["rect"]
-            plat = e["platform"]
-            enemy.x += e["dir"] * 2
-            if enemy.left < plat.left:
-                enemy.left = plat.left
-                e["dir"] *= -1
-            elif enemy.right > plat.right:
-                enemy.right = plat.right
-                e["dir"] *= -1
-
-        # COLLISIONS
-        for e in enemies[:]:
-            enemy = e["rect"]
-            if player.colliderect(enemy):
-                if velocity_y > 0 and player.bottom - velocity_y <= enemy.top:
-                    enemies.remove(e)
-                    velocity_y = -7
+        for enemy in enemies:
+            enemy.update()
+            if player.rect.colliderect(enemy.rect) and enemy.alive:
+                if player.velocity_y > 0 and player.rect.bottom - player.velocity_y <= enemy.rect.top:
+                    enemy.alive = False
+                    player.velocity_y = player.jump_power / 2
                 else:
                     alive = False
 
-        # DEATH
-        for death in deaths:
-            if player.colliderect(death):
-                alive = False
+        for death in level.deaths:
+            if death.left < player.rect.centerx < death.right:
+                if player.rect.bottom >= level.ground.top:
+                    alive = False
 
-        # WIN
-        if player.colliderect(finish_line):
+        if player.rect.colliderect(level.finish_line):
             win = True
+    else:
+        player.animate_death()
 
-    elif not alive:
-        death_velocity += 0.5
-        player.y += death_velocity
-        player_image = player_hit
+    # cam player lock
+    player.x = max(0, min(player.x, level.ground.width - player.width))
 
-    cam = camera_x
+    # cam
+    camera_offset = player.rect.x - WIDTH // 2
+    camera_offset = max(0, min(camera_offset, level.ground.width - WIDTH))
 
-    for g in grounds:
-        pygame.draw.rect(screen, GREEN, pygame.Rect(g.x - cam, g.y, g.width, g.height))
+    # background replicated
+    for x in range(0, level.ground.width, assets.background.get_width()):
+        screen.blit(assets.background, (x - camera_offset, 0))
 
-    for plat in platforms:
-        pygame.draw.rect(screen, GREEN, pygame.Rect(plat.x - cam, plat.y, plat.width, plat.height))
+    # ground
+    for x in range(0, level.ground.width, 32):
+        if x == 0:
+            screen.blit(assets.ground_top_left, (x - camera_offset, level.ground.top))
+        elif x + 32 >= level.ground.width:
+            screen.blit(assets.ground_top_right, (x - camera_offset, level.ground.top))
+        else:
+            screen.blit(assets.ground_top, (x - camera_offset, level.ground.top))
 
-    for hole in holes:
-        pygame.draw.rect(screen, BLACK, pygame.Rect(hole.x - cam, hole.y, hole.width, hole.height))
+        screen.blit(assets.ground_center, (x - camera_offset, level.ground.top + 32))
+        screen.blit(assets.ground_center, (x - camera_offset, level.ground.top + 64))
 
-    for death in deaths:
-        pygame.draw.rect(screen, ORANGE, pygame.Rect(death.x - cam, death.y, death.width, death.height))
+    # plat
+    for plat in level.platforms:
+        x, y, w, h = plat.move(-camera_offset, 0)
+        screen.blit(assets.platform_left, (x, y - 8))
+        for i in range(1, (w // 32) - 1):
+            screen.blit(assets.platform_middle, (x + i * 32, y - 8))
+        screen.blit(assets.platform_right, (x + w - 32, y - 8))
 
-    for e in enemies:
-        enemy = e["rect"]
-        pygame.draw.rect(screen, RED, pygame.Rect(enemy.x - cam, enemy.y, enemy.width, enemy.height))
+    # holes
+    for hole in level.holes:
+        pygame.draw.rect(screen, (0, 0, 0), hole.move(-camera_offset, 0))
+        for x in range(hole.left, hole.right, 32):
+            screen.blit(assets.spike, (x - camera_offset, level.ground.top - 1))
 
-    pygame.draw.rect(screen, BLUE, pygame.Rect(finish_line.x - cam, finish_line.y, finish_line.width, finish_line.height))
+    # spikes
+    for death in level.deaths:
+        pygame.draw.rect(screen, (0, 0, 0), death.move(-camera_offset, 0))
+        for x in range(death.left, death.right, 32):
+            screen.blit(assets.spike, (x - camera_offset, level.ground.top - 1))
 
-    screen.blit(player_image, (player.x - cam, player.y))
+    # enemies
+    for enemy in enemies:
+        screen.blit(enemy.get_image(), enemy.rect.move(-camera_offset, 0))
 
-    # MESSAGES
+    # flag
+    flag_anim_timer += 1
+    if flag_anim_timer >= flag_anim_speed:
+        flag_anim_timer = 0
+        flag_anim_index = (flag_anim_index + 1) % len(flag_images)
+
+    flag_img = pygame.transform.scale(flag_images[flag_anim_index], (32, 32 * 3))
+    flag_pos = (level.finish_line.x - camera_offset, level.finish_line.y - flag_img.get_height() + level.finish_line.height)
+    screen.blit(flag_img, flag_pos)
+
+    # player
+    screen.blit(player.get_image(), player.rect.move(-camera_offset, 0))
+
+    # messages
     font = pygame.font.SysFont(None, 48)
-    if not alive and player.y > HEIGHT:
-        text = font.render("Game Over! Press R", True, (255, 0, 0))
+    if not alive:
+        text = font.render("Game Over! Press R to Restart", True, (255, 0, 0))
         screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2))
     if win:
-        text = font.render("You Win! Press R", True, (0, 255, 0))
+        text = font.render("You Win! Press R to Restart", True, (0, 255, 0))
         screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2))
 
     pygame.display.flip()
