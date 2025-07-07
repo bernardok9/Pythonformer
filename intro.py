@@ -1,44 +1,95 @@
 import pygame
 import sys
-import random
 
 pygame.init()
-WIDTH, HEIGHT = 400, 600
+
+# Screen Config
+WIDTH, HEIGHT = 800, 400
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 
-# Players vars
-player = pygame.Rect(200, 540, 40, 40)
-velocity_y = 0
-gravity = 0.4
-boost_strength = -13
-alive = True
-launched = False
+# Test Block Colors
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+BLACK = (0, 0, 0)
+ORANGE = (255, 165, 0)
 
-MAX_FALL_SPEED = 15
+# Map Limits
+LEFT_LIMIT = -300
+RIGHT_LIMIT = 1600
 
-# Ground
-launch_pad = pygame.Rect(0, 580, WIDTH, 20)
+# Sprites
+player_idle = pygame.image.load("assets/character/character_yellow_idle.png").convert_alpha()
+player_hit = pygame.image.load("assets/character/character_yellow_hit.png").convert_alpha()
+player_walk_a = pygame.image.load("assets/character/character_yellow_walk_a.png").convert_alpha()
+player_walk_b = pygame.image.load("assets/character/character_yellow_walk_b.png").convert_alpha()
+player_jump = pygame.image.load("assets/character/character_yellow_jump.png").convert_alpha()
 
-# Starter Portals
-portals = []
-for i in range(10):
-    x = random.randint(50, 300)
-    y = 550 - i * 60
-    portals.append(pygame.Rect(x, y, 100, 15))
+# Sprites Sizes
+PLAYER_WIDTH, PLAYER_HEIGHT = 40, 60
+player_idle = pygame.transform.scale(player_idle, (PLAYER_WIDTH, PLAYER_HEIGHT))
+player_hit = pygame.transform.scale(player_hit, (PLAYER_WIDTH, PLAYER_HEIGHT))
+player_walk_a = pygame.transform.scale(player_walk_a, (PLAYER_WIDTH, PLAYER_HEIGHT))
+player_walk_b = pygame.transform.scale(player_walk_b, (PLAYER_WIDTH, PLAYER_HEIGHT))
+player_jump = pygame.transform.scale(player_jump, (PLAYER_WIDTH, PLAYER_HEIGHT))
 
-# UI / Camera
-camera_offset = 0
-font = pygame.font.SysFont(None, 48)
-reset_button = pygame.Rect(WIDTH // 2 - 60, HEIGHT // 2 + 50, 120, 40)
-score = 0
-CAMERA_FOLLOW_Y = int(HEIGHT * 0.6)
+# Plataforms
+platforms = [
+    pygame.Rect(150, HEIGHT - 80, 100, 20),
+    pygame.Rect(300, HEIGHT - 130, 100, 20),
+    pygame.Rect(500, HEIGHT - 180, 100, 20),
+    pygame.Rect(900, HEIGHT - 130, 100, 20),
+    pygame.Rect(1200, HEIGHT - 180, 100, 20),
+]
 
+# Restart
+def reset():
+    global player, velocity_y, on_ground, camera_x, alive, win, enemies
+    global walk_timer, walk_frame, player_image, death_velocity
 
-# Main Loop
-running = True
-while running:
-    screen.fill((20, 20, 30))
+    player = pygame.Rect(50, HEIGHT - 70, PLAYER_WIDTH, PLAYER_HEIGHT)
+    velocity_y = 0
+    on_ground = False
+    camera_x = 0
+    alive = True
+    win = False
+
+    walk_timer = 0
+    walk_frame = 0
+    player_image = player_idle
+    death_velocity = 0
+
+    enemies = [
+        {"rect": pygame.Rect(200, HEIGHT - 80 - 40, 40, 40), "dir": 1, "platform": platforms[0]},
+        {"rect": pygame.Rect(550, HEIGHT - 180 - 40, 40, 40), "dir": -1, "platform": platforms[2]},
+        {"rect": pygame.Rect(950, HEIGHT - 130 - 40, 40, 40), "dir": 1, "platform": platforms[3]},
+    ]
+
+# Cam
+camera_x = 0
+
+# Fields
+grounds = [
+    pygame.Rect(LEFT_LIMIT, HEIGHT - 20, 2000, 20),
+]
+
+holes = [
+    pygame.Rect(400, HEIGHT - 20, 150, 20),
+]
+
+deaths = [
+    pygame.Rect(400, HEIGHT - 5, 150, 10),
+]
+
+finish_line = pygame.Rect(1400, HEIGHT - 100, 20, 100)
+
+reset()
+
+# Main Loop Game
+while True:
+    screen.fill(WHITE)
     dt = clock.tick(60) / 1000
 
     for event in pygame.event.get():
@@ -46,104 +97,125 @@ while running:
             pygame.quit()
             sys.exit()
 
-    if alive:
-        keys = pygame.key.get_pressed()
+    keys = pygame.key.get_pressed()
 
-        # Left Right
+    # RESTART
+    if keys[pygame.K_r] and (not alive or win):
+        reset()
+
+    if alive and not win:
         if keys[pygame.K_LEFT]:
             player.x -= 5
         if keys[pygame.K_RIGHT]:
             player.x += 5
 
-        # Space to Launch
-        if not launched:
-            if keys[pygame.K_SPACE]:
-                launched = True
-                velocity_y = boost_strength
+        if player.x < LEFT_LIMIT:
+            player.x = LEFT_LIMIT
+        if player.right > RIGHT_LIMIT:
+            player.right = RIGHT_LIMIT
+
+        camera_x = max(LEFT_LIMIT, min(RIGHT_LIMIT - WIDTH, player.x - WIDTH // 2))
+
+        # JUMP
+        if keys[pygame.K_SPACE] and on_ground:
+            velocity_y = -15
+            on_ground = False
+
+        velocity_y += 0.8
+        player.y += velocity_y
+
+        on_ground = False
+
+        for g in grounds:
+            if player.colliderect(g):
+                player.bottom = g.top
+                velocity_y = 0
+                on_ground = True
+
+        for plat in platforms:
+            if player.colliderect(plat) and velocity_y > 0:
+                if player.bottom - velocity_y <= plat.top + 5:
+                    player.bottom = plat.top
+                    velocity_y = 0
+                    on_ground = True
+
+        # ANIMATIONS
+        if not on_ground:
+            player_image = player_jump
+        elif keys[pygame.K_LEFT] or keys[pygame.K_RIGHT]:
+            walk_timer += 1
+            if walk_timer >= 10:
+                walk_timer = 0
+                walk_frame = 1 - walk_frame
+            player_image = player_walk_a if walk_frame == 0 else player_walk_b
         else:
-            velocity_y += gravity
-            player.y += velocity_y
+            player_image = player_idle
 
-            # GameOver if player down
-            if velocity_y > MAX_FALL_SPEED:
-                alive = False 
+        # ENEMIES
+        for e in enemies:
+            enemy = e["rect"]
+            plat = e["platform"]
+            enemy.x += e["dir"] * 2
+            if enemy.left < plat.left:
+                enemy.left = plat.left
+                e["dir"] *= -1
+            elif enemy.right > plat.right:
+                enemy.right = plat.right
+                e["dir"] *= -1
 
-            # Collision: DOWN-UP (Boost) UP-DOWN (DEATH)
-            for portal in portals:
-                if (player.colliderect(portal) and velocity_y < 0):
-                    velocity_y = boost_strength
-                elif (
-                    player.colliderect(portal)
-                    and velocity_y > 0
-                    and player.bottom - velocity_y <= portal.top
-                ):
+        # COLLISIONS
+        for e in enemies[:]:
+            enemy = e["rect"]
+            if player.colliderect(enemy):
+                if velocity_y > 0 and player.bottom - velocity_y <= enemy.top:
+                    enemies.remove(e)
+                    velocity_y = -7
+                else:
                     alive = False
 
-            # CAMERA
-            if player.y < CAMERA_FOLLOW_Y:
-                dy = CAMERA_FOLLOW_Y - player.y
-                player.y = CAMERA_FOLLOW_Y
-                camera_offset += dy
-                for p in portals:
-                    p.y += dy
+        # DEATH
+        for death in deaths:
+            if player.colliderect(death):
+                alive = False
 
-            score = max(score, int(camera_offset))
+        # WIN
+        if player.colliderect(finish_line):
+            win = True
 
-            # REMOVE PORTALS ON CAMERA UP
-            while portals and portals[0].y > HEIGHT:
-                portals.pop(0)
+    elif not alive:
+        death_velocity += 0.5
+        player.y += death_velocity
+        player_image = player_hit
 
-            # ADD PORTALS ON CAMERA UP
-            while len(portals) < 10:
-                last_y = portals[-1].y if portals else 0
-                x = random.randint(40, 300)
-                y = last_y - random.randint(60, 100)
-                portals.append(pygame.Rect(x, y, 100, 15))
+    cam = camera_x
 
-    # DRAW - LAUNCHPAD
-    pygame.draw.rect(screen, (80, 80, 80), launch_pad)
+    for g in grounds:
+        pygame.draw.rect(screen, GREEN, pygame.Rect(g.x - cam, g.y, g.width, g.height))
 
-    # DRAW - PORTAL
-    for portal in portals:
-        pygame.draw.rect(screen, (0, 255, 255), portal)
+    for plat in platforms:
+        pygame.draw.rect(screen, GREEN, pygame.Rect(plat.x - cam, plat.y, plat.width, plat.height))
 
-    # DRAW - PLAYER
-    pygame.draw.rect(screen, (255, 100, 0), player)
+    for hole in holes:
+        pygame.draw.rect(screen, BLACK, pygame.Rect(hole.x - cam, hole.y, hole.width, hole.height))
 
-    if not launched:
-        txt = font.render("Pressione espaço para lançar!", True, (255, 255, 255))
-        screen.blit(txt, (WIDTH // 2 - txt.get_width() // 2, 200))
+    for death in deaths:
+        pygame.draw.rect(screen, ORANGE, pygame.Rect(death.x - cam, death.y, death.width, death.height))
 
-    if not alive:
-        text = font.render("Você caiu!", True, (255, 0, 0))
+    for e in enemies:
+        enemy = e["rect"]
+        pygame.draw.rect(screen, RED, pygame.Rect(enemy.x - cam, enemy.y, enemy.width, enemy.height))
+
+    pygame.draw.rect(screen, BLUE, pygame.Rect(finish_line.x - cam, finish_line.y, finish_line.width, finish_line.height))
+
+    screen.blit(player_image, (player.x - cam, player.y))
+
+    # MESSAGES
+    font = pygame.font.SysFont(None, 48)
+    if not alive and player.y > HEIGHT:
+        text = font.render("Game Over! Press R", True, (255, 0, 0))
         screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2))
-    
-        # RESET
-        pygame.draw.rect(screen, (50, 150, 50), reset_button)
-        reset_text = font.render("Reset", True, (255, 255, 255))
-        screen.blit(reset_text, (reset_button.x + (reset_button.width - reset_text.get_width()) // 2,
-                                reset_button.y + (reset_button.height - reset_text.get_height()) // 2))
-
-        # RESET - ONCLICK
-        mouse_pos = pygame.mouse.get_pos()
-        mouse_pressed = pygame.mouse.get_pressed()
-        if mouse_pressed[0] and reset_button.collidepoint(mouse_pos):
-            # Resetar o jogo
-            player.x = 200
-            player.y = 540
-            velocity_y = 0
-            alive = True
-            launched = False
-            camera_offset = 0
-            score = 0
-            portals.clear()
-            for i in range(10):
-                x = random.randint(50, 300)
-                y = 550 - i * 60
-                portals.append(pygame.Rect(x, y, 100, 15))
-
-    # SCORE
-    score_text = font.render(f"Score: {score}", True, (255, 255, 255))
-    screen.blit(score_text, (10, 10))
+    if win:
+        text = font.render("You Win! Press R", True, (0, 255, 0))
+        screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2))
 
     pygame.display.flip()
